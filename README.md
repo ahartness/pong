@@ -4,7 +4,7 @@ Small C++ project for building a **Pong** game with [raylib](https://www.raylib.
 
 ## Current status
 
-The project is set up with CMake and raylib, and the current starter code opens a window and draws a simple message. It is ready to be expanded into a full Pong game.
+The project now opens a Pong window with two visible paddles and a moving ball. The player paddle is controlled with **W/S** or the **Up/Down** arrow keys, while the AI paddle is currently drawn in place without behavior yet.
 
 ## Requirements
 
@@ -39,10 +39,9 @@ cmake --build build
 
 Typical next steps:
 
-1. Add left and right paddles.
-2. Add a moving ball with wall and paddle collision.
-3. Track score for each player.
-4. Add keyboard controls and a reset condition after each point.
+1. Add AI movement for the second paddle.
+2. Track score for each player.
+3. Add a reset condition after each point.
 
 ## Notes
 

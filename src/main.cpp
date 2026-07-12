@@ -1,4 +1,5 @@
 #include "raylib.h"
+#include <cmath>
 
 struct Paddle {
   Rectangle bounds;
@@ -17,6 +18,63 @@ static Vector2 CreateServeVelocity(float horizontalSpeed, float verticalSpeed) {
           GetRandomValue(0, 1) == 0 ? -verticalSpeed : verticalSpeed};
 }
 
+static float ClampFloat(float value, float minValue, float maxValue) {
+  if (value < minValue) {
+    return minValue;
+  }
+  if (value > maxValue) {
+    return maxValue;
+  }
+  return value;
+}
+
+static float PredictBallYAtX(const Ball &ball, float targetX, float minY,
+                             float maxY) {
+  if (ball.velocity.x <= 0.0f) {
+    return ball.position.y;
+  }
+
+  const float travelTime = (targetX - ball.position.x) / ball.velocity.x;
+  if (travelTime <= 0.0f) {
+    return ball.position.y;
+  }
+
+  float projectedY = ball.position.y + ball.velocity.y * travelTime;
+  while (projectedY < minY || projectedY > maxY) {
+    if (projectedY < minY) {
+      projectedY = minY + (minY - projectedY);
+    } else {
+      projectedY = maxY - (projectedY - maxY);
+    }
+  }
+
+  return projectedY;
+}
+
+static void BounceBallOffPaddle(Ball &ball, const Paddle &paddle,
+                                float horizontalDirection,
+                                float maxVerticalSpeed,
+                                float minHorizontalSpeed) {
+  const float paddleCenterY = paddle.bounds.y + paddle.bounds.height / 2.0f;
+  const float hitOffset = ball.position.y - paddleCenterY;
+  const float normalizedHitOffset =
+      ClampFloat(hitOffset / (paddle.bounds.height / 2.0f), -1.0f, 1.0f);
+
+  const float newVerticalSpeed = normalizedHitOffset * maxVerticalSpeed;
+  const float currentSpeed = std::sqrt(ball.velocity.x * ball.velocity.x +
+                                       ball.velocity.y * ball.velocity.y);
+  const float minHorizontalSpeedSq = minHorizontalSpeed * minHorizontalSpeed;
+  float horizontalSpeedSq =
+      currentSpeed * currentSpeed - newVerticalSpeed * newVerticalSpeed;
+  if (horizontalSpeedSq < minHorizontalSpeedSq) {
+    horizontalSpeedSq = minHorizontalSpeedSq;
+  }
+
+  ball.velocity.x = std::sqrt(horizontalSpeedSq) *
+                    (horizontalDirection < 0.0f ? -1.0f : 1.0f);
+  ball.velocity.y = newVerticalSpeed;
+}
+
 int main() {
   // Define the fixed dimensions and gameplay measurements used across the
   // scene.
@@ -30,6 +88,12 @@ int main() {
   constexpr float ballRadius = 10.0f;
   constexpr float ballHorizontalSpeed = 260.0f;
   constexpr float ballVerticalSpeed = 180.0f;
+  constexpr float paddleBounceMaxVerticalSpeed = 280.0f;
+  constexpr float paddleBounceMinHorizontalSpeed = 180.0f;
+  constexpr float aiDeadZone = 10.0f;
+  constexpr float aiMinReactionDelay = 0.10f;
+  constexpr float aiMaxReactionDelay = 0.50f;
+  constexpr float aiAimError = 40.0f;
 
   // Create the game window and lock the loop to a stable frame rate.
   InitWindow(screenWidth, screenHeight, "Pong");
@@ -43,11 +107,13 @@ int main() {
                 0};
   Paddle ai{{screenWidth - paddleMargin - paddleWidth,
              (screenHeight - paddleHeight) / 2.0f, paddleWidth, paddleHeight},
-            0.0f,
+            320.0f,
             0};
   Ball ball{{screenWidth / 2.0f, screenHeight / 2.0f},
             CreateServeVelocity(ballHorizontalSpeed, ballVerticalSpeed),
             ballRadius};
+  float aiThinkTimer = 0.0f;
+  float aiTargetY = screenHeight / 2.0f;
 
   while (!WindowShouldClose()) {
     // Use frame time so movement stays consistent across different machines.
@@ -61,12 +127,46 @@ int main() {
       player.bounds.y += player.speed * deltaTime;
     }
 
+    aiThinkTimer -= deltaTime;
+    if (aiThinkTimer <= 0.0f) {
+      aiThinkTimer =
+          GetRandomValue(static_cast<int>(aiMinReactionDelay * 1000.0f),
+                         static_cast<int>(aiMaxReactionDelay * 1000.0f)) /
+          1000.0f;
+
+      if (ball.velocity.x > 0.0f) {
+        const float predictedY = PredictBallYAtX(ball, ai.bounds.x, ball.radius,
+                                                 screenHeight - ball.radius);
+        const float aimOffset = GetRandomValue(static_cast<int>(-aiAimError),
+                                               static_cast<int>(aiAimError));
+        aiTargetY = predictedY + aimOffset;
+      } else {
+        aiTargetY = screenHeight / 2.0f;
+      }
+    }
+
+    const float aiCenterY = ai.bounds.y + ai.bounds.height / 2.0f;
+    const float targetY = ClampFloat(aiTargetY, ai.bounds.height / 2.0f,
+                                     screenHeight - ai.bounds.height / 2.0f);
+    const float aiDeltaY = targetY - aiCenterY;
+    if (aiDeltaY > aiDeadZone) {
+      ai.bounds.y += ai.speed * deltaTime;
+    } else if (aiDeltaY < -aiDeadZone) {
+      ai.bounds.y -= ai.speed * deltaTime;
+    }
+
     // Clamp the player paddle so it cannot leave the screen.
     if (player.bounds.y < 0.0f) {
       player.bounds.y = 0.0f;
     }
     if (player.bounds.y + player.bounds.height > screenHeight) {
       player.bounds.y = screenHeight - player.bounds.height;
+    }
+    if (ai.bounds.y < 0.0f) {
+      ai.bounds.y = 0.0f;
+    }
+    if (ai.bounds.y + ai.bounds.height > screenHeight) {
+      ai.bounds.y = screenHeight - ai.bounds.height;
     }
 
     // Advance the ball using its current velocity.
@@ -90,7 +190,8 @@ int main() {
         ball.position.y >= player.bounds.y &&
         ball.position.y <= player.bounds.y + player.bounds.height &&
         ball.velocity.x < 0.0f) {
-      ball.velocity.x *= -1.0f;
+      BounceBallOffPaddle(ball, player, 1.0f, paddleBounceMaxVerticalSpeed,
+                          paddleBounceMinHorizontalSpeed);
       ball.position.x = player.bounds.x + player.bounds.width + ball.radius;
     }
 
@@ -99,7 +200,8 @@ int main() {
         ball.position.y >= ai.bounds.y &&
         ball.position.y <= ai.bounds.y + ai.bounds.height &&
         ball.velocity.x > 0.0f) {
-      ball.velocity.x *= -1.0f;
+      BounceBallOffPaddle(ball, ai, -1.0f, paddleBounceMaxVerticalSpeed,
+                          paddleBounceMinHorizontalSpeed);
       ball.position.x = ai.bounds.x - ball.radius;
     }
 

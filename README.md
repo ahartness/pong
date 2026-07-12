@@ -4,7 +4,7 @@ Small C++ project for building a **Pong** game with [raylib](https://www.raylib.
 
 ## Current status
 
-The project now opens a Pong window with two visible paddles and a moving ball. The player paddle is controlled with **W/S** or the **Up/Down** arrow keys, while the AI paddle is currently drawn in place without behavior yet.
+The project now opens a Pong window with two active paddles and a moving ball. The player paddle is controlled with **W/S** or the **Up/Down** arrow keys, while the AI paddle predicts intercepts (including wall bounces) and applies humanized reaction/aim variation.
 
 ## Requirements
 
@@ -39,9 +39,9 @@ cmake --build build
 
 Typical next steps:
 
-1. Add AI movement for the second paddle.
-2. Track score for each player.
-3. Add a reset condition after each point.
+1. Make AI difficulty configurable (speed, reaction delay, and prediction).
+2. Add spin/angle control based on where the ball strikes the paddle.
+3. Add round flow polish (serve countdown, win condition, and restart UX).
 
 ## Notes
 

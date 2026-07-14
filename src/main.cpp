@@ -54,13 +54,19 @@ static float PredictBallYAtX(const Ball &ball, float targetX, float minY,
 static void BounceBallOffPaddle(Ball &ball, const Paddle &paddle,
                                 float horizontalDirection,
                                 float maxVerticalSpeed,
-                                float minHorizontalSpeed) {
+                                float minHorizontalSpeed,
+                                float verticalSpeedJitter) {
   const float paddleCenterY = paddle.bounds.y + paddle.bounds.height / 2.0f;
   const float hitOffset = ball.position.y - paddleCenterY;
   const float normalizedHitOffset =
       ClampFloat(hitOffset / (paddle.bounds.height / 2.0f), -1.0f, 1.0f);
 
-  const float newVerticalSpeed = normalizedHitOffset * maxVerticalSpeed;
+  const float jitter =
+      GetRandomValue(static_cast<int>(-verticalSpeedJitter),
+                     static_cast<int>(verticalSpeedJitter));
+  const float newVerticalSpeed = ClampFloat(
+      normalizedHitOffset * maxVerticalSpeed + jitter, -maxVerticalSpeed,
+      maxVerticalSpeed);
   const float currentSpeed = std::sqrt(ball.velocity.x * ball.velocity.x +
                                        ball.velocity.y * ball.velocity.y);
   const float minHorizontalSpeedSq = minHorizontalSpeed * minHorizontalSpeed;
@@ -90,10 +96,11 @@ int main() {
   constexpr float ballVerticalSpeed = 180.0f;
   constexpr float paddleBounceMaxVerticalSpeed = 280.0f;
   constexpr float paddleBounceMinHorizontalSpeed = 180.0f;
-  constexpr float aiDeadZone = 10.0f;
+  constexpr float aiDeadZone = 20.0f;
   constexpr float aiMinReactionDelay = 0.10f;
   constexpr float aiMaxReactionDelay = 0.50f;
-  constexpr float aiAimError = 40.0f;
+  constexpr float aiAimError = 100.0f;
+  constexpr float aiBounceVerticalJitter = 55.0f;
 
   // Create the game window and lock the loop to a stable frame rate.
   InitWindow(screenWidth, screenHeight, "Pong");
@@ -191,7 +198,7 @@ int main() {
         ball.position.y <= player.bounds.y + player.bounds.height &&
         ball.velocity.x < 0.0f) {
       BounceBallOffPaddle(ball, player, 1.0f, paddleBounceMaxVerticalSpeed,
-                          paddleBounceMinHorizontalSpeed);
+                          paddleBounceMinHorizontalSpeed, 0.0f);
       ball.position.x = player.bounds.x + player.bounds.width + ball.radius;
     }
 
@@ -201,7 +208,8 @@ int main() {
         ball.position.y <= ai.bounds.y + ai.bounds.height &&
         ball.velocity.x > 0.0f) {
       BounceBallOffPaddle(ball, ai, -1.0f, paddleBounceMaxVerticalSpeed,
-                          paddleBounceMinHorizontalSpeed);
+                          paddleBounceMinHorizontalSpeed,
+                          aiBounceVerticalJitter);
       ball.position.x = ai.bounds.x - ball.radius;
     }
 
